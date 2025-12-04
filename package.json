@@ -1,0 +1,30 @@
+{
+  "name": "hotel-booking-platform",
+  "version": "1.0.0",
+  "description": "Plateforme de réservation d'hôtel avec Node.js et MongoDB",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "hotel",
+    "booking",
+    "mongodb",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mongodb": "^7.0.0",
+    "mongoose": "^8.0.3",
+    "validator": "^13.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
