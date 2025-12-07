@@ -111,6 +111,10 @@ const server = http.createServer(async (req, res) => {
         sendJSON(res, 400, { error: 'Email invalide' });
         return;
       }
+      // Ajouter actif: true par défaut si non spécifié
+      if (data.actif === undefined) {
+        data.actif = true;
+      }
       const result = await hotels.insertOne(data);
       
       // Manipulation JSON (lecture/écriture)
@@ -218,6 +222,10 @@ const server = http.createServer(async (req, res) => {
         sendJSON(res, 400, { error: 'Champs manquants' });
         return;
       }
+      // Ajouter disponible: true par défaut si non spécifié
+      if (data.disponible === undefined) {
+        data.disponible = true;
+      }
       const result = await rooms.insertOne(data);
       sendJSON(res, 201, { message: 'Chambre créée', room: { ...data, _id: result.insertedId } });
       return;
@@ -318,6 +326,10 @@ const server = http.createServer(async (req, res) => {
       if (!isValidEmail(client.email)) {
         sendJSON(res, 400, { error: 'Email invalide' });
         return;
+      }
+      // Ajouter statut: "en_attente" par défaut si non spécifié
+      if (data.statut === undefined) {
+        data.statut = 'en_attente';
       }
       const result = await reservations.insertOne(data);
       sendJSON(res, 201, { message: 'Réservation créée', reservation: { ...data, _id: result.insertedId } });
