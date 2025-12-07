@@ -42,7 +42,7 @@
     "actif": true
   },
   {
-    "nom": "H�tel Paris",
+    "nom": "Hotel Paris",
     "adresse": {
       "rue": "15 Rue de la Paix",
       "ville": "Paris",
@@ -52,8 +52,65 @@
     "telephone": "+33123456789",
     "email": "contact@hotel.fr",
     "etoiles": 4,
-    "description": "Un bel h�tel",
+    "description": "Un bel hotel",
     "_id": "6935659d629163fcc757ebea"
+  },
+  {
+    "nom": "Hotel Paris",
+    "adresse": {
+      "rue": "15 Rue de la Paix",
+      "ville": "Paris",
+      "codePostal": "75001",
+      "pays": "France"
+    },
+    "telephone": "+33123456789",
+    "email": "contact@hotel.fr",
+    "etoiles": 4,
+    "description": "Un bel hotel",
+    "_id": "69356ffb7e8b5ad396f57c85"
+  },
+  {
+    "nom": "Hotel Paris",
+    "adresse": {
+      "rue": "15 Rue de la Paix",
+      "ville": "Paris",
+      "codePostal": "75001",
+      "pays": "France"
+    },
+    "telephone": "+33123456789",
+    "email": "contact@hotel.fr",
+    "etoiles": 4,
+    "description": "Un bel hotel",
+    "_id": "693579f67e8b5ad396f57c86"
+  },
+  {
+    "nom": "Hotel Paris",
+    "adresse": {
+      "rue": "15 Rue de la Paix",
+      "ville": "Paris",
+      "codePostal": "75001",
+      "pays": "France"
+    },
+    "telephone": "+33123456789",
+    "email": "contact@hotel.fr",
+    "etoiles": 4,
+    "description": "Un bel hotel",
+    "_id": "69357b4e7e8b5ad396f57c87"
+  },
+  {
+    "nom": "Hotel Paris",
+    "adresse": {
+      "rue": "15 Rue de la Paix",
+      "ville": "Paris",
+      "codePostal": "75001",
+      "pays": "France"
+    },
+    "telephone": "+33123456789",
+    "email": "contact@hotel.fr",
+    "etoiles": 4,
+    "description": "Un bel hotel",
+    "actif": true,
+    "_id": "6935e0c6198dacc32ddad867"
   },
   {
     "nom": "H�tel Paris",
@@ -67,6 +124,7 @@
     "email": "contact@hotel.fr",
     "etoiles": 4,
     "description": "Un bel h�tel",
-    "_id": "69356ffb7e8b5ad396f57c85"
+    "actif": true,
+    "_id": "6935e5d6198dacc32ddad868"
   }
 ]

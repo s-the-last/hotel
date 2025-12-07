@@ -77,6 +77,36 @@ function sendJSON(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
+// HELPERS pour raccourcir les routes
+async function updateById(collection, id, data, res, name) {
+  try {
+    const objectId = new ObjectId(id);
+    const result = await collection.updateOne({ _id: objectId }, { $set: data });
+    if (result.matchedCount === 0) {
+      sendJSON(res, 404, { error: `${name} non trouvé${name.endsWith('e') ? 'e' : ''}` });
+      return;
+    }
+    const item = await collection.findOne({ _id: objectId });
+    sendJSON(res, 200, { message: `${name} modifié${name.endsWith('e') ? 'e' : ''}`, [name.toLowerCase()]: item });
+  } catch (err) {
+    sendJSON(res, 400, { error: 'ID invalide' });
+  }
+}
+
+async function deleteById(collection, id, res, name) {
+  try {
+    const objectId = new ObjectId(id);
+    const result = await collection.deleteOne({ _id: objectId });
+    if (result.deletedCount === 0) {
+      sendJSON(res, 404, { error: `${name} non trouvé${name.endsWith('e') ? 'e' : ''}` });
+      return;
+    }
+    sendJSON(res, 200, { message: `${name} supprimé${name.endsWith('e') ? 'e' : ''}` });
+  } catch (err) {
+    sendJSON(res, 400, { error: 'ID invalide' });
+  }
+}
+
 // SERVEUR HTTP
 const server = http.createServer(async (req, res) => {
   // CORS
@@ -111,93 +141,61 @@ const server = http.createServer(async (req, res) => {
         sendJSON(res, 400, { error: 'Email invalide' });
         return;
       }
-      // Ajouter actif: true par défaut si non spécifié
-      if (data.actif === undefined) {
-        data.actif = true;
-      }
+      if (data.actif === undefined) data.actif = true;
       const result = await hotels.insertOne(data);
-      
-      // Manipulation JSON (lecture/écriture)
       try {
         const jsonData = JSON.parse(readFileSync(JSON_FILE, 'utf8') || '[]');
         jsonData.push({ ...data, _id: result.insertedId.toString() });
         writeFileSync(JSON_FILE, JSON.stringify(jsonData, null, 2));
       } catch (err) {
-        // Si le fichier n'existe pas, on le crée
         writeFileSync(JSON_FILE, JSON.stringify([{ ...data, _id: result.insertedId.toString() }], null, 2));
       }
-      
       sendJSON(res, 201, { message: 'Hôtel créé', hotel: { ...data, _id: result.insertedId } });
       return;
     }
 
-    // ROUTE 2: GET - Liste des hôtels avec filtres
+    // ROUTE 2: GET - Liste des hôtels
     if (url.startsWith('/api/hotels') && method === 'GET' && !url.includes('/recherche') && !url.includes('/top')) {
       const query = parseQuery(url);
       const { ville, etoiles, page = 1, limit = 10 } = query;
       const filter = { actif: true };
-      
       if (ville) filter['adresse.ville'] = new RegExp(ville, 'i');
       if (etoiles) filter.etoiles = parseInt(etoiles);
-
       const skip = (parseInt(page) - 1) * parseInt(limit);
       const hotelsList = await hotels.find(filter).limit(parseInt(limit)).skip(skip).toArray();
       const total = await hotels.countDocuments(filter);
-
       sendJSON(res, 200, { hotels: hotelsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
       return;
     }
 
-    // ROUTE 3: GET - Recherche avancée d'hôtels
+    // ROUTE 3: GET - Recherche avancée
     if (url.startsWith('/api/hotels/recherche/avancee') && method === 'GET') {
       const query = parseQuery(url);
       const { ville, etoilesMin, etoilesMax, actif } = query;
       const filter = {};
-      
-      if (actif === undefined || actif === 'true') {
-        filter.actif = true;
-      } else if (actif === 'false') {
-        filter.actif = false;
-      }
-      
+      if (actif === undefined || actif === 'true') filter.actif = true;
+      else if (actif === 'false') filter.actif = false;
       if (ville) filter['adresse.ville'] = new RegExp(ville, 'i');
       if (etoilesMin || etoilesMax) {
         filter.etoiles = {};
         if (etoilesMin) filter.etoiles.$gte = parseInt(etoilesMin);
         if (etoilesMax) filter.etoiles.$lte = parseInt(etoilesMax);
       }
-      
       const hotelsList = await hotels.find(filter).toArray();
       sendJSON(res, 200, { count: hotelsList.length, hotels: hotelsList });
       return;
     }
 //persone2
     // ROUTE 4: PUT - Modifier un hôtel
-    if (url.startsWith('/api/hotels/') && method === 'PUT') {
-      const id = extractId(url);
+    if (url.startsWith('/api/hotels/') && method === 'PUT' && !url.includes('/top') && !url.includes('/recherche')) {
       const data = await parseBody(req);
-      const result = await hotels.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: data }
-      );
-      if (result.matchedCount === 0) {
-        sendJSON(res, 404, { error: 'Hôtel non trouvé' });
-        return;
-      }
-      const hotel = await hotels.findOne({ _id: new ObjectId(id) });
-      sendJSON(res, 200, { message: 'Hôtel modifié', hotel });
+      await updateById(hotels, extractId(url), data, res, 'Hôtel');
       return;
     }
 
     // ROUTE 5: DELETE - Supprimer un hôtel
     if (url.startsWith('/api/hotels/') && method === 'DELETE') {
-      const id = extractId(url);
-      const result = await hotels.deleteOne({ _id: new ObjectId(id) });
-      if (result.deletedCount === 0) {
-        sendJSON(res, 404, { error: 'Hôtel non trouvé' });
-        return;
-      }
-      sendJSON(res, 200, { message: 'Hôtel supprimé' });
+      await deleteById(hotels, extractId(url), res, 'Hôtel');
       return;
     }
 
@@ -217,26 +215,21 @@ const server = http.createServer(async (req, res) => {
     // ROUTE 7: POST - Créer une chambre
     if (url === '/api/rooms' && method === 'POST') {
       const data = await parseBody(req);
-      const { hotelId, numero, type, prixNuit, capacite } = data;
-      if (!hotelId || !numero || !type || !prixNuit || !capacite) {
+      if (!data.hotelId || !data.numero || !data.type || !data.prixNuit || !data.capacite) {
         sendJSON(res, 400, { error: 'Champs manquants' });
         return;
       }
-      // Ajouter disponible: true par défaut si non spécifié
-      if (data.disponible === undefined) {
-        data.disponible = true;
-      }
+      if (data.disponible === undefined) data.disponible = true;
       const result = await rooms.insertOne(data);
       sendJSON(res, 201, { message: 'Chambre créée', room: { ...data, _id: result.insertedId } });
       return;
     }
 
-    // ROUTE 8: GET - Liste des chambres avec filtres
+    // ROUTE 8: GET - Liste des chambres
     if (url.startsWith('/api/rooms') && method === 'GET' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
       const query = parseQuery(url);
       const { hotelId, type, prixMin, prixMax, disponible, page = 1, limit = 10 } = query;
       const filter = {};
-      
       if (hotelId) filter.hotelId = hotelId;
       if (type) filter.type = type;
       if (disponible !== undefined) filter.disponible = disponible === 'true';
@@ -245,41 +238,23 @@ const server = http.createServer(async (req, res) => {
         if (prixMin) filter.prixNuit.$gte = parseInt(prixMin);
         if (prixMax) filter.prixNuit.$lte = parseInt(prixMax);
       }
-
       const skip = (parseInt(page) - 1) * parseInt(limit);
       const roomsList = await rooms.find(filter).limit(parseInt(limit)).skip(skip).toArray();
       const total = await rooms.countDocuments(filter);
-      
       sendJSON(res, 200, { rooms: roomsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
       return;
     }
 
     // ROUTE 9: PUT - Modifier une chambre
     if (url.startsWith('/api/rooms/') && method === 'PUT' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
-      const id = extractId(url);
       const data = await parseBody(req);
-      const result = await rooms.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: data }
-      );
-      if (result.matchedCount === 0) {
-        sendJSON(res, 404, { error: 'Chambre non trouvée' });
-        return;
-      }
-      const room = await rooms.findOne({ _id: new ObjectId(id) });
-      sendJSON(res, 200, { message: 'Chambre modifiée', room });
+      await updateById(rooms, extractId(url), data, res, 'Chambre');
       return;
     }
 //persone4
     // ROUTE 10: DELETE - Supprimer une chambre
     if (url.startsWith('/api/rooms/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
-      const id = extractId(url);
-      const result = await rooms.deleteOne({ _id: new ObjectId(id) });
-      if (result.deletedCount === 0) {
-        sendJSON(res, 404, { error: 'Chambre non trouvée' });
-        return;
-      }
-      sendJSON(res, 200, { message: 'Chambre supprimée' });
+      await deleteById(rooms, extractId(url), res, 'Chambre');
       return;
     }
 
@@ -318,71 +293,48 @@ const server = http.createServer(async (req, res) => {
     // ROUTE 13: POST - Créer une réservation
     if (url === '/api/reservations' && method === 'POST') {
       const data = await parseBody(req);
-      const { hotelId, roomId, client, dateArrivee, dateDepart, prixTotal } = data;
-      if (!hotelId || !roomId || !client || !dateArrivee || !dateDepart || !prixTotal) {
+      if (!data.hotelId || !data.roomId || !data.client || !data.dateArrivee || !data.dateDepart || !data.prixTotal) {
         sendJSON(res, 400, { error: 'Champs manquants' });
         return;
       }
-      if (!isValidEmail(client.email)) {
+      if (!isValidEmail(data.client.email)) {
         sendJSON(res, 400, { error: 'Email invalide' });
         return;
       }
-      // Ajouter statut: "en_attente" par défaut si non spécifié
-      if (data.statut === undefined) {
-        data.statut = 'en_attente';
-      }
+      if (data.statut === undefined) data.statut = 'en_attente';
       const result = await reservations.insertOne(data);
       sendJSON(res, 201, { message: 'Réservation créée', reservation: { ...data, _id: result.insertedId } });
       return;
     }
 
-    // ROUTE 14: GET - Liste des réservations avec filtres
+    // ROUTE 14: GET - Liste des réservations
     if (url.startsWith('/api/reservations') && method === 'GET' && !url.includes('/stats') && !url.includes('/completes')) {
       const query = parseQuery(url);
       const { statut, dateDebut, dateFin, page = 1, limit = 10 } = query;
       const filter = {};
-      
       if (statut) filter.statut = statut;
       if (dateDebut || dateFin) {
         filter.dateArrivee = {};
         if (dateDebut) filter.dateArrivee.$gte = new Date(dateDebut);
         if (dateFin) filter.dateArrivee.$lte = new Date(dateFin);
       }
-
       const skip = (parseInt(page) - 1) * parseInt(limit);
       const reservationsList = await reservations.find(filter).limit(parseInt(limit)).skip(skip).toArray();
       const total = await reservations.countDocuments(filter);
-
       sendJSON(res, 200, { reservations: reservationsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
       return;
     }
 //persone6
     // ROUTE 15: PUT - Modifier une réservation
     if (url.startsWith('/api/reservations/') && method === 'PUT' && !url.includes('/stats') && !url.includes('/completes')) {
-      const id = extractId(url);
       const data = await parseBody(req);
-      const result = await reservations.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: data }
-      );
-      if (result.matchedCount === 0) {
-        sendJSON(res, 404, { error: 'Réservation non trouvée' });
-        return;
-      }
-      const reservation = await reservations.findOne({ _id: new ObjectId(id) });
-      sendJSON(res, 200, { message: 'Réservation modifiée', reservation });
+      await updateById(reservations, extractId(url), data, res, 'Réservation');
       return;
     }
 
     // ROUTE 16: DELETE - Supprimer une réservation
     if (url.startsWith('/api/reservations/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/completes')) {
-      const id = extractId(url);
-      const result = await reservations.deleteOne({ _id: new ObjectId(id) });
-      if (result.deletedCount === 0) {
-        sendJSON(res, 404, { error: 'Réservation non trouvée' });
-        return;
-      }
-      sendJSON(res, 200, { message: 'Réservation supprimée' });
+      await deleteById(reservations, extractId(url), res, 'Réservation');
       return;
     }
 
@@ -399,7 +351,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // ROUTE 18: GET - Réservations avec détails complets (Lookup multiple)
+    // ROUTE 18: GET - Réservations avec détails complets 
     if (url === '/api/reservations/completes' && method === 'GET') {
       const pipeline = [
         {
