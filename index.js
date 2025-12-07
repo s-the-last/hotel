@@ -82,8 +82,15 @@ app.get('/api/hotels', async (req, res) => {
 // ROUTE 3: GET - Recherche avancée d'hôtels
 app.get('/api/hotels/recherche/avancee', async (req, res) => {
   try {
-    const { ville, etoilesMin, etoilesMax, actif = true } = req.query;
-    const filter = { actif: actif === 'true' };
+    const { ville, etoilesMin, etoilesMax, actif } = req.query;
+    const filter = {};
+    
+    // Par défaut, on cherche les hôtels actifs si actif n'est pas spécifié
+    if (actif === undefined || actif === 'true') {
+      filter.actif = true;
+    } else if (actif === 'false') {
+      filter.actif = false;
+    }
     
     if (ville) filter['adresse.ville'] = new RegExp(ville, 'i');
     if (etoilesMin || etoilesMax) {
