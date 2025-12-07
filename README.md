@@ -1,73 +1,104 @@
 # 🏨 API de Réservation d'Hôtel
 
-## 📐 Architecture du projet
+Bonjour ! Ceci est mon projet de backend pour une plateforme de réservation d'hôtel. J'ai utilisé Node.js et MongoDB comme demandé dans le cours.
+
+## 📐 Comment j'ai organisé mon projet
+
+J'ai mis tout mon code dans un seul fichier `index.js` pour que ce soit simple. Voici la structure :
 
 ```
 No Sql/
-├── index.js          → Tout le code principal (connexion, serveur, routes)
-├── models/           → Les schémas Mongoose
-│   ├── Hotel.js
-│   ├── Room.js
-│   └── Reservation.js
-├── package.json      → Les dépendances
-└── .env              → Configuration (MongoDB, PORT)
+├── index.js          → Tout mon code est là-dedans
+├── data/             → Un dossier pour les fichiers JSON
+│   └── hotels.json   → J'écris aussi dans ce fichier JSON
+├── package.json      → Les dépendances que j'utilise
+└── .env              → Mes variables d'environnement (MongoDB, PORT)
 ```
 
-**Tout est centralisé dans `index.js`** pour rester simple et clair.
+J'ai tout mis dans `index.js` parce que c'est plus simple pour moi de tout voir au même endroit.
 
 ---
 
-## 🔌 Explication de la connexion dans index.js
+## 🔌 Comment ça fonctionne dans mon index.js
 
-Dans mon fichier `index.js`, voici comment tout fonctionne :
+Je vais vous expliquer comment j'ai fait, étape par étape :
 
-### 1. Les imports (lignes 1-5)
+### 1. Les imports que j'utilise
+
+Au début de mon fichier, j'importe ce dont j'ai besoin :
+
 ```javascript
-import express from 'express';      // Framework pour créer l'API
-import mongoose from 'mongoose';    // Pour parler à MongoDB
-import cors from 'cors';            // Autorise les requêtes depuis le navigateur
-import dotenv from 'dotenv';        // Lit le fichier .env
-import validator from 'validator';  // Valide les données (ex: email)
+import http from 'http';                    // Pour créer mon serveur
+import { MongoClient, ObjectId } from 'mongodb';  // Pour parler à MongoDB
+import dotenv from 'dotenv';                // Pour lire le fichier .env
+import { readFileSync, writeFileSync } from 'fs';  // Pour lire/écrire dans les fichiers JSON
 ```
 
-### 2. Configuration Express (lignes 11-16)
+J'utilise `http` natif de Node.js, pas Express, parce que le cours demande d'utiliser le serveur HTTP natif. C'est un peu plus long à écrire mais j'apprends mieux comme ça.
+
+### 2. Ma configuration
+
+Ensuite je configure le port et l'URL de MongoDB :
+
 ```javascript
-const app = express();              // Crée l'application Express
-const PORT = process.env.PORT || 3000;  // Port depuis .env ou 3000 par défaut
+const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hotel-booking';
-
-app.use(cors());                    // Active CORS
-app.use(express.json());            // Permet de lire les données JSON
 ```
 
-### 3. Connexion MongoDB (lignes 21-26)
+Si je n'ai pas de fichier `.env`, ça utilise les valeurs par défaut.
+
+### 3. Ma connexion à MongoDB
+
+Pour me connecter à MongoDB, j'utilise le driver natif (pas Mongoose) :
+
 ```javascript
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ MongoDB connecté'))  // Si ça marche
-  .catch(err => {
-    console.error('❌ Erreur MongoDB:', err.message);  // Si erreur
-    process.exit(1);  // Arrête le serveur
-  });
-```
-Se connecte à MongoDB. Si la base n'existe pas, elle sera créée automatiquement.
+const client = new MongoClient(MONGODB_URI);
+let db, hotels, rooms, reservations;
 
-### 4. Import des modèles (lignes 31-33)
+(async () => {
+  try {
+    await client.connect();
+    console.log('✅ MongoDB connecté');
+    db = client.db('hotel-booking');
+    hotels = db.collection('hotels');
+    rooms = db.collection('rooms');
+    reservations = db.collection('reservations');
+  } catch (err) {
+    console.error('❌ Erreur MongoDB:', err.message);
+    process.exit(1);
+  }
+})();
+```
+
+J'ai appris que si la base de données n'existe pas, MongoDB la crée automatiquement ! C'est pratique.
+
+### 4. Mon serveur HTTP
+
+Pour créer mon serveur, j'utilise `http.createServer()` :
+
 ```javascript
-import Hotel from './models/Hotel.js';
-import Reservation from './models/Reservation.js';
-import Room from './models/Room.js';
+const server = http.createServer(async (req, res) => {
+  // Je gère CORS manuellement
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  
+  // Je vérifie l'URL et la méthode pour savoir quelle route appeler
+  if (url === '/api/hotels' && method === 'GET') {
+    // Ma logique ici
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`🚀 Serveur sur http://localhost:${PORT}`);
+});
 ```
-Charge les schémas Mongoose pour pouvoir créer/modifier/supprimer des données.
 
----
+## 🛣️ Mes routes 
 
-## 🛣️ Explication des routes et leur rôle
 
-### 🏠 Route 0: Accueil
+### 🏠 Route 0: La page d'accueil
 
-**GET `/`** → Page d'accueil de l'API
-- **Rôle :** Affiche les informations générales de l'API
-- **Retourne :** Message de bienvenue, version, nombre total de routes
+**GET `/`** → Juste pour dire bonjour
+- Quand on va sur `http://localhost:3000/`, ça affiche un message de bienvenue
 
 ```bash
 curl http://localhost:3000/
@@ -75,11 +106,12 @@ curl http://localhost:3000/
 
 ---
 
-### 🏨 Routes Hôtels (6 routes)
+### 🏨 Routes pour les hôtels (6 routes)
 
-1. **POST `/api/hotels`** → Créer un nouvel hôtel
-   - **Rôle :** Ajoute un hôtel dans la base de données
-   - **Validation :** Vérifie que l'email est valide
+1. **POST `/api/hotels`** → Créer un hôtel
+   - C'est ma route pour ajouter un nouvel hôtel dans la base
+   - Je vérifie que l'email est valide avec une regex (j'ai appris ça)
+   - J'écris aussi dans le fichier `data/hotels.json` pour la manipulation JSON
    
    ```bash
    curl -X POST http://localhost:3000/api/hotels \
@@ -100,8 +132,7 @@ curl http://localhost:3000/
    ```
 
 2. **GET `/api/hotels`** → Voir tous les hôtels
-   - **Rôle :** Liste les hôtels avec filtres (ville, étoiles) et pagination
-   - **Filtres :** `?ville=Paris&etoiles=4&page=1&limit=10`
+   - Je peux filtrer par ville, étoiles, et faire de la pagination
    
    ```bash
    # Sans filtres
@@ -112,47 +143,48 @@ curl http://localhost:3000/
    ```
 
 3. **GET `/api/hotels/recherche/avancee`** → Recherche avancée
-   - **Rôle :** Recherche avec plusieurs critères (ville, étoiles min/max)
-   - **C'est ma route de lecture avancée** (obligatoire pour le projet)
+   - C'est ma route de lecture avancée (obligatoire pour le projet)
+   - Je peux chercher par ville et par nombre d'étoiles (min et max)
    
    ```bash
    curl "http://localhost:3000/api/hotels/recherche/avancee?ville=Paris&etoilesMin=3&etoilesMax=5"
    ```
 
 4. **PUT `/api/hotels/:id`** → Modifier un hôtel
-   - **Rôle :** Met à jour les informations d'un hôtel existant
+   - Je peux changer les infos d'un hôtel existant
+   - Il faut mettre l'ID de l'hôtel dans l'URL
    
    ```bash
-   curl -X PUT http://localhost:3000/api/hotels/507f1f77bcf86cd799439011 \
+   curl -X PUT http://localhost:3000/api/hotels/6935659d629163fcc757ebea \
      -H "Content-Type: application/json" \
      -d '{"etoiles": 5, "description": "Hôtel de luxe"}'
    ```
 
 5. **DELETE `/api/hotels/:id`** → Supprimer un hôtel
-   - **Rôle :** Supprime un hôtel de la base
+   - Je supprime un hôtel de la base
    
    ```bash
-   curl -X DELETE http://localhost:3000/api/hotels/507f1f77bcf86cd799439011
+   curl -X DELETE http://localhost:3000/api/hotels/6935659d629163fcc757ebea
    ```
 
 6. **GET `/api/hotels/top/etoiles`** → Top 5 hôtels par étoiles
-   - **Rôle :** Agrégation MongoDB qui groupe les hôtels par nombre d'étoiles
-   - **C'est ma route d'agrégation** (obligatoire pour le projet)
+   - C'est ma route d'agrégation (obligatoire)
+   - J'utilise `$group` et `$sort` pour grouper les hôtels par nombre d'étoiles
    
    ```bash
    curl http://localhost:3000/api/hotels/top/etoiles
    ```
 
-### 🛏️ Routes Chambres (6 routes)
+### 🛏️ Routes pour les chambres (6 routes)
 
 7. **POST `/api/rooms`** → Créer une chambre
-   - **Rôle :** Ajoute une chambre liée à un hôtel
+   - J'ajoute une chambre liée à un hôtel
    
    ```bash
    curl -X POST http://localhost:3000/api/rooms \
      -H "Content-Type: application/json" \
      -d '{
-       "hotelId": "507f1f77bcf86cd799439011",
+       "hotelId": "6935659d629163fcc757ebea",
        "numero": "101",
        "type": "Double",
        "prixNuit": 120,
@@ -161,14 +193,14 @@ curl http://localhost:3000/
    ```
 
 8. **GET `/api/rooms`** → Voir toutes les chambres
-   - **Rôle :** Liste les chambres avec filtres (hôtel, type, prix, disponibilité)
+   - Je peux filtrer par hôtel, type, prix, disponibilité
    
    ```bash
-   curl "http://localhost:3000/api/rooms?hotelId=507f1f77bcf86cd799439011&type=Double"
+   curl "http://localhost:3000/api/rooms?hotelId=6935659d629163fcc757ebea&type=Double"
    ```
 
 9. **PUT `/api/rooms/:id`** → Modifier une chambre
-   - **Rôle :** Met à jour une chambre (prix, disponibilité, etc.)
+   - Je peux changer le prix, la disponibilité, etc.
    
    ```bash
    curl -X PUT http://localhost:3000/api/rooms/507f1f77bcf86cd799439012 \
@@ -177,39 +209,39 @@ curl http://localhost:3000/
    ```
 
 10. **DELETE `/api/rooms/:id`** → Supprimer une chambre
-    - **Rôle :** Supprime une chambre
     
     ```bash
     curl -X DELETE http://localhost:3000/api/rooms/507f1f77bcf86cd799439012
     ```
 
 11. **GET `/api/rooms/stats/par-type`** → Statistiques par type
-    - **Rôle :** Agrégation qui compte les chambres et calcule le prix moyen par type
+    - J'utilise une agrégation pour compter les chambres et calculer le prix moyen par type
     
     ```bash
     curl http://localhost:3000/api/rooms/stats/par-type
     ```
 
 12. **GET `/api/rooms/plus-reservees`** → Chambres les plus réservées
-    - **Rôle :** Agrégation avec `$lookup` pour joindre les réservations
-    - **C'est ma route avec lookup** (obligatoire pour le projet)
+    - C'est ma route avec `$lookup` (obligatoire)
+    - J'utilise `$lookup` pour joindre les réservations avec les chambres
+    - C'était un peu difficile au début mais j'ai réussi !
     
     ```bash
     curl http://localhost:3000/api/rooms/plus-reservees
     ```
 
-### 📅 Routes Réservations (6 routes)
+### 📅 Routes pour les réservations (6 routes)
 
 13. **POST `/api/reservations`** → Créer une réservation
-    - **Rôle :** Crée une réservation liée à un hôtel et une chambre
-    - **Validation :** Vérifie que l'email du client est valide
-    - **C'est ma route d'écriture** (obligatoire pour le projet)
+    - C'est ma route d'écriture (obligatoire)
+    - Je vérifie que l'email est valide
+    - Je lie la réservation à un hôtel et une chambre
     
     ```bash
     curl -X POST http://localhost:3000/api/reservations \
       -H "Content-Type: application/json" \
       -d '{
-        "hotelId": "507f1f77bcf86cd799439011",
+        "hotelId": "6935659d629163fcc757ebea",
         "roomId": "507f1f77bcf86cd799439012",
         "client": {
           "nom": "Dupont",
@@ -224,14 +256,14 @@ curl http://localhost:3000/
     ```
 
 14. **GET `/api/reservations`** → Voir toutes les réservations
-    - **Rôle :** Liste les réservations avec filtres (statut, dates)
+    - Je peux filtrer par statut, dates
     
     ```bash
     curl "http://localhost:3000/api/reservations?statut=confirmee&page=1&limit=10"
     ```
 
 15. **PUT `/api/reservations/:id`** → Modifier une réservation
-    - **Rôle :** Met à jour une réservation (ex: changer le statut)
+    - Par exemple changer le statut
     
     ```bash
     curl -X PUT http://localhost:3000/api/reservations/507f1f77bcf86cd799439013 \
@@ -240,21 +272,21 @@ curl http://localhost:3000/
     ```
 
 16. **DELETE `/api/reservations/:id`** → Supprimer une réservation
-    - **Rôle :** Supprime une réservation
     
     ```bash
     curl -X DELETE http://localhost:3000/api/reservations/507f1f77bcf86cd799439013
     ```
 
 17. **GET `/api/reservations/stats`** → Statistiques des réservations
-    - **Rôle :** Agrégation qui groupe par statut et calcule les revenus
+    - J'utilise une agrégation pour grouper par statut et calculer les revenus
     
     ```bash
     curl http://localhost:3000/api/reservations/stats
     ```
 
 18. **GET `/api/reservations/completes`** → Réservations avec détails complets
-    - **Rôle :** Agrégation avec `$lookup` multiple pour joindre hôtel ET chambre
+    - J'utilise plusieurs `$lookup` pour joindre l'hôtel ET la chambre
+    - C'était compliqué mais j'ai réussi !
     
     ```bash
     curl http://localhost:3000/api/reservations/completes
@@ -262,7 +294,7 @@ curl http://localhost:3000/
 
 ---
 
-## 🚀 Installation rapide
+## 🚀 Comment installer et lancer le projet
 
 ### 1. Installer les dépendances
 ```bash
@@ -270,7 +302,7 @@ npm install
 ```
 
 ### 2. Créer le fichier `.env`
-Créez un fichier `.env` à la racine du projet :
+Je crée un fichier `.env` à la racine avec :
 
 ```env
 MONGODB_URI=mongodb://localhost:27017/hotel-booking
@@ -278,16 +310,20 @@ PORT=3000
 ```
 
 ### 3. Démarrer MongoDB
+Si vous utilisez MongoDB local, je lance MongoDB dans un terminal :
 ```bash
 mongod
 ```
 
-### 4. Démarrer le serveur
+**Note :** Si vous utilisez MongoDB Atlas (cloud), vous n'avez pas besoin de cette étape.
+
+### 4. Démarrer mon serveur
+Dans un autre terminal :
 ```bash
 npm start
 ```
 
-Vous devriez voir :
+Si tout va bien, je vois :
 ```
 ✅ MongoDB connecté
 🚀 Serveur sur http://localhost:3000
@@ -295,61 +331,79 @@ Vous devriez voir :
 
 ---
 
-## 🐚 Utiliser Git Bash avec curl
+## 🐚 Comment utiliser curl dans Git Bash
 
-**Sur Windows, utilisez Git Bash pour les commandes curl.**
+Sur Windows, j'utilise Git Bash pour les commandes curl.
 
-**Ouvrir Git Bash :**
-- Clic droit dans le dossier → **"Git Bash Here"**
-- OU dans VS Code : Terminal → Menu déroulant → **"Git Bash"**
+**Pour ouvrir Git Bash :**
+- Clic droit dans le dossier → "Git Bash Here"
+- OU dans VS Code : Terminal → Menu déroulant → "Git Bash"
 
-**Coller dans Git Bash :** Clic droit dans le terminal
+**Pour coller :** Clic droit dans le terminal
 
----
+**⚠️ Important :** Il faut toujours mettre `curl` devant l'URL !
+- ✅ Correct : `curl http://localhost:3000/api/hotels`
+- ❌ Incorrect : `http://localhost:3000/api/hotels` (ça ne marche pas, Git Bash essaie de l'exécuter comme une commande)
 
-## 💾 Base de données
-
-**Nom :** `hotel-booking`
-
-**3 collections :**
-- `hotels` → Les hôtels
-- `rooms` → Les chambres
-- `reservations` → Les réservations
-
-**⚠️ La base et les collections se créent automatiquement !**
+J'ai fait cette erreur au début, maintenant je me souviens toujours de mettre `curl` !
 
 ---
 
-## 🛠️ Technologies
+## 💾 Ma base de données
 
-- **Node.js** + **Express** → API
-- **MongoDB** → Base de données
-- **Mongoose** → Modélisation des données
-- **Validator** → Validation des données
+**Nom de la base :** `hotel-booking`
+
+**J'ai 3 collections :**
+- `hotels` → Pour stocker les hôtels
+- `rooms` → Pour stocker les chambres
+- `reservations` → Pour stocker les réservations
+
+**⚠️ La base et les collections se créent toutes seules !** C'est MongoDB qui fait ça automatiquement quand on écrit dedans pour la première fois.
+
+**J'utilise le driver MongoDB natif** (pas Mongoose) comme demandé dans le cours.
 
 ---
 
-## ❓ Questions fréquentes
+## 🛠️ Les technologies que j'utilise
 
-**Comment obtenir l'ID d'un hôtel ?**
-→ L'ID est dans la réponse quand vous créez un hôtel (champ `_id`)
+- **Node.js** + **HTTP natif** → Pour créer mon API (pas Express, le cours demande HTTP natif)
+- **MongoDB** → Ma base de données
+- **MongoDB Driver natif** → Pour parler à MongoDB directement (pas Mongoose)
+- **Validation manuelle** → J'utilise des regex pour vérifier les emails (pas de bibliothèque)
+
+J'ai appris que c'est plus bas niveau que Express et Mongoose, mais ça m'aide à mieux comprendre comment ça marche vraiment.
+
+---
+
+## ❓ Questions que je me suis posées
+
+**Comment je récupère l'ID d'un hôtel ?**
+→ Quand je crée un hôtel, MongoDB me renvoie un `_id` dans la réponse. Je copie cet ID et je l'utilise pour modifier ou supprimer.
 
 **Le serveur ne démarre pas ?**
-→ Vérifiez que MongoDB est démarré (`mongod`)
+→ Je vérifie que MongoDB est bien lancé avec `mongod` dans un terminal.
 
 **Erreur "Cannot find module" ?**
-→ Faites `npm install`
+→ Je fais `npm install` pour installer les dépendances.
+
+**Pourquoi je n'utilise pas Express ou Mongoose ?**
+→ Le cours demande d'utiliser HTTP natif et le driver MongoDB natif pour apprendre les bases. C'est plus long à écrire mais j'apprends mieux comme ça.
+
+**Comment fonctionne la manipulation JSON ?**
+→ Quand je crée un hôtel avec POST `/api/hotels`, j'écris aussi dans le fichier `data/hotels.json` en plus de MongoDB. C'est pour la partie manipulation de fichiers JSON du projet.
 
 ---
 
-## 📊 Mes 3 routes obligatoires (résumé)
+## 📊 Mes 3 routes obligatoires
 
-1. **POST `/api/reservations`** → Route d'écriture
-2. **GET `/api/hotels/recherche/avancee`** → Route de lecture avancée
-3. **GET `/api/rooms/plus-reservees`** → Route d'agrégation avec lookup
+Pour le projet, je devais faire 3 routes obligatoires :
 
-Les 15 autres routes sont dans le code en commentaires pour mes camarades.
+1. **POST `/api/reservations`** → Ma route d'écriture
+2. **GET `/api/hotels/recherche/avancee`** → Ma route de lecture avancée
+3. **GET `/api/rooms/plus-reservees`** → Ma route d'agrégation avec lookup
+
+J'ai aussi créé 15 autres routes que j'ai mises en commentaire dans le code pour mes camarades du groupe.
 
 ---
 
-**Bon développement ! 🚀**
+Voilà, c'est mon projet ! J'espère que c'est clair. Si vous avez des questions, n'hésitez pas ! 😊

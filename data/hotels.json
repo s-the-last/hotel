@@ -1,0 +1,72 @@
+[
+  {
+    "nom": "Hôtel Paris Centre",
+    "adresse": {
+      "rue": "15 Rue de la Paix",
+      "ville": "Paris",
+      "codePostal": "75001",
+      "pays": "France"
+    },
+    "telephone": "+33123456789",
+    "email": "contact@hotelparis.fr",
+    "etoiles": 4,
+    "description": "Hôtel moderne au cœur de Paris",
+    "actif": true
+  },
+  {
+    "nom": "Hôtel Lyon Confluence",
+    "adresse": {
+      "rue": "20 Quai Perrache",
+      "ville": "Lyon",
+      "codePostal": "69002",
+      "pays": "France"
+    },
+    "telephone": "+33456789123",
+    "email": "contact@hotellyon.fr",
+    "etoiles": 3,
+    "description": "Hôtel avec vue sur la Saône",
+    "actif": true
+  },
+  {
+    "nom": "Hôtel Marseille Vieux-Port",
+    "adresse": {
+      "rue": "5 Quai du Port",
+      "ville": "Marseille",
+      "codePostal": "13001",
+      "pays": "France"
+    },
+    "telephone": "+33491234567",
+    "email": "contact@hotelmarseille.fr",
+    "etoiles": 5,
+    "description": "Hôtel de luxe face au Vieux-Port",
+    "actif": true
+  },
+  {
+    "nom": "H�tel Paris",
+    "adresse": {
+      "rue": "15 Rue de la Paix",
+      "ville": "Paris",
+      "codePostal": "75001",
+      "pays": "France"
+    },
+    "telephone": "+33123456789",
+    "email": "contact@hotel.fr",
+    "etoiles": 4,
+    "description": "Un bel h�tel",
+    "_id": "6935659d629163fcc757ebea"
+  },
+  {
+    "nom": "H�tel Paris",
+    "adresse": {
+      "rue": "15 Rue de la Paix",
+      "ville": "Paris",
+      "codePostal": "75001",
+      "pays": "France"
+    },
+    "telephone": "+33123456789",
+    "email": "contact@hotel.fr",
+    "etoiles": 4,
+    "description": "Un bel h�tel",
+    "_id": "69356ffb7e8b5ad396f57c85"
+  }
+]

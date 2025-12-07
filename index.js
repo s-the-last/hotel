@@ -1,392 +1,445 @@
-import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
+import http from 'http';
+import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
-import validator from 'validator';
+import { readFileSync, writeFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 dotenv.config();
 
 // CONFIGURATION
-
-const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hotel-booking';
 
-app.use(cors());
-app.use(express.json());
-
+// Chemins pour les fichiers JSON
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const JSON_FILE = join(__dirname, 'data', 'hotels.json');
 
 // CONNEXION MONGODB
+const client = new MongoClient(MONGODB_URI);
+let db, hotels, rooms, reservations;
 
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ MongoDB connecté'))
-  .catch(err => {
+(async () => {
+  try {
+    await client.connect();
+    console.log('✅ MongoDB connecté');
+    db = client.db('hotel-booking');
+    hotels = db.collection('hotels');
+    rooms = db.collection('rooms');
+    reservations = db.collection('reservations');
+  } catch (err) {
     console.error('❌ Erreur MongoDB:', err.message);
     process.exit(1);
+  }
+})();
+
+// FONCTION UTILITAIRE : Parser le body de la requête
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
   });
+}
 
+// FONCTION UTILITAIRE : Validation email simple
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
-// MODÈLES
-
-import Hotel from './models/Hotel.js';
-import Reservation from './models/Reservation.js';
-import Room from './models/Room.js';
-
-//personne 1 kanga kouassi franck 
-
-// ROUTE 0: ACCUEIL
-
-app.get('/', (req, res) => {
-  res.json({
-    message: 'API de réservation d\'hôtel projet backend node express et mongodb',
-    version: '1.0.0',
-    totalRoutes: 19
+// FONCTION UTILITAIRE : Parser les query params
+function parseQuery(url) {
+  const query = {};
+  const urlObj = new URL(url, `http://localhost:${PORT}`);
+  urlObj.searchParams.forEach((value, key) => {
+    query[key] = value;
   });
-});
+  return query;
+}
 
+// FONCTION UTILITAIRE : Extraire l'ID de l'URL
+function extractId(url) {
+  const parts = url.split('/');
+  return parts[parts.length - 1];
+}
 
-// ROUTES HÔTELS 
- 
-// ROUTE 1: POST - Créer un hôtel
-app.post('/api/hotels', async (req, res) => {
-  try {
-    if (!validator.isEmail(req.body.email)) {
-      return res.status(400).json({ error: 'Email invalide' });
-    }
-    const hotel = await Hotel.create(req.body);
-    res.status(201).json({ message: 'Hôtel créé', hotel });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+// FONCTION UTILITAIRE : Réponse JSON
+function sendJSON(res, statusCode, data) {
+  res.setHeader('Content-Type', 'application/json');
+  res.writeHead(statusCode);
+  res.end(JSON.stringify(data));
+}
+
+// SERVEUR HTTP
+const server = http.createServer(async (req, res) => {
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
   }
-});
 
-// ROUTE 2: GET - Liste des hôtels avec filtres
-app.get('/api/hotels', async (req, res) => {
+  const url = req.url;
+  const method = req.method;
+
   try {
-    const { ville, etoiles, page = 1, limit = 10 } = req.query;
-    const filter = { actif: true };
-    
-    if (ville) filter['adresse.ville'] = new RegExp(ville, 'i');
-    if (etoiles) filter.etoiles = parseInt(etoiles);
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const hotels = await Hotel.find(filter).limit(parseInt(limit)).skip(skip);
-    const total = await Hotel.countDocuments(filter);
-
-    res.json({ hotels, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 3: GET - Recherche avancée d'hôtels
-app.get('/api/hotels/recherche/avancee', async (req, res) => {
-  try {
-    const { ville, etoilesMin, etoilesMax, actif } = req.query;
-    const filter = {};
-    
-    // Par défaut, on cherche les hôtels actifs si actif n'est pas spécifié
-    if (actif === undefined || actif === 'true') {
-      filter.actif = true;
-    } else if (actif === 'false') {
-      filter.actif = false;
-    }
-    
-    if (ville) filter['adresse.ville'] = new RegExp(ville, 'i');
-    if (etoilesMin || etoilesMax) {
-      filter.etoiles = {};
-      if (etoilesMin) filter.etoiles.$gte = parseInt(etoilesMin);
-      if (etoilesMax) filter.etoiles.$lte = parseInt(etoilesMax);
-    }
-    
-    const hotels = await Hotel.find(filter);
-    res.json({ count: hotels.length, hotels });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-//personne 2
-
-// ROUTE 4: PUT - Modifier un hôtel
-app.put('/api/hotels/:id', async (req, res) => {
-  try {
-    const hotel = await Hotel.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!hotel) return res.status(404).json({ error: 'Hôtel non trouvé' });
-    res.json({ message: 'Hôtel modifié', hotel });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 5: DELETE - Supprimer un hôtel
-app.delete('/api/hotels/:id', async (req, res) => {
-  try {
-    const hotel = await Hotel.findByIdAndDelete(req.params.id);
-    if (!hotel) return res.status(404).json({ error: 'Hôtel non trouvé' });
-    res.json({ message: 'Hôtel supprimé' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 6: GET - Agrégation Top 5 hôtels par étoiles
-app.get('/api/hotels/top/etoiles', async (req, res) => {
-  try {
-    const pipeline = [
-      { $group: { _id: '$etoiles', nombre: { $sum: 1 }, hotels: { $push: '$nom' } } },
-      { $sort: { _id: -1 } },
-      { $limit: 5 },
-      { $project: { etoiles: '$_id', nombre: 1, hotels: 1, _id: 0 } }
-    ];
-    const result = await Hotel.aggregate(pipeline);
-    res.json({ topHotels: result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-
-
-//personne 3
-
-// ROUTES CHAMBRES 
-
-
-// ROUTE 7: POST - Créer une chambre
-app.post('/api/rooms', async (req, res) => {
-  try {
-    const { hotelId, numero, type, prixNuit, capacite } = req.body;
-    if (!hotelId || !numero || !type || !prixNuit || !capacite) {
-      return res.status(400).json({ error: 'Champs manquants' });
-    }
-    const room = await Room.create(req.body);
-    res.status(201).json({ message: 'Chambre créée', room });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 8: GET - Liste des chambres avec filtres
-app.get('/api/rooms', async (req, res) => {
-  try {
-    const { hotelId, type, prixMin, prixMax, disponible, page = 1, limit = 10 } = req.query;
-    const filter = {};
-    
-    if (hotelId) filter.hotelId = hotelId;
-    if (type) filter.type = type;
-    if (disponible !== undefined) filter.disponible = disponible === 'true';
-    if (prixMin || prixMax) {
-      filter.prixNuit = {};
-      if (prixMin) filter.prixNuit.$gte = parseInt(prixMin);
-      if (prixMax) filter.prixNuit.$lte = parseInt(prixMax);
+    // ROUTE 0: ACCUEIL
+    if (url === '/' && method === 'GET') {
+      sendJSON(res, 200, {
+        message: 'API de réservation d\'hôtel projet backend node express et mongodb',
+        version: '1.0.0',
+        totalRoutes: 19
+      });
+      return;
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const rooms = await Room.find(filter).populate('hotelId').limit(parseInt(limit)).skip(skip);
-    const total = await Room.countDocuments(filter);
-    
-    res.json({ rooms, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 9: PUT - Modifier une chambre
-app.put('/api/rooms/:id', async (req, res) => {
-  try {
-    const room = await Room.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!room) return res.status(404).json({ error: 'Chambre non trouvée' });
-    res.json({ message: 'Chambre modifiée', room });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-//personne 4
-
-
-// ROUTE 10: DELETE - Supprimer une chambre
-app.delete('/api/rooms/:id', async (req, res) => {
-  try {
-    const room = await Room.findByIdAndDelete(req.params.id);
-    if (!room) return res.status(404).json({ error: 'Chambre non trouvée' });
-    res.json({ message: 'Chambre supprimée' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 11: GET - Agrégation Statistiques des chambres par type
-app.get('/api/rooms/stats/par-type', async (req, res) => {
-  try {
-    const pipeline = [
-      { $group: { _id: '$type', nombre: { $sum: 1 }, prixMoyen: { $avg: '$prixNuit' } } },
-      { $sort: { nombre: -1 } },
-      { $project: { type: '$_id', nombre: 1, prixMoyen: { $round: ['$prixMoyen', 2] }, _id: 0 } }
-    ];
-    const result = await Room.aggregate(pipeline);
-    res.json({ statistiques: result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 12: GET - Chambres les plus réservées (Lookup)
-app.get('/api/rooms/plus-reservees', async (req, res) => {
-  try {
-    const pipeline = [
-      {
-        $lookup: {
-          from: 'reservations',
-          localField: '_id',
-          foreignField: 'roomId',
-          as: 'reservations'
-        }
-      },
-      { $project: { numero: 1, type: 1, prixNuit: 1, nombreReservations: { $size: '$reservations' } } },
-      { $sort: { nombreReservations: -1 } },
-      { $limit: 10 }
-    ];
-    const result = await Room.aggregate(pipeline);
-    res.json({ topChambres: result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-//personne 5
-
-// ROUTES RÉSERVATIONS 
-
-// ROUTE 13: POST - Créer une réservation
-app.post('/api/reservations', async (req, res) => {
-  try {
-    const { hotelId, roomId, client, dateArrivee, dateDepart, prixTotal } = req.body;
-    if (!hotelId || !roomId || !client || !dateArrivee || !dateDepart || !prixTotal) {
-      return res.status(400).json({ error: 'Champs manquants' });
-    }
-    if (!validator.isEmail(client.email)) {
-      return res.status(400).json({ error: 'Email invalide' });
-    }
-    const reservation = await Reservation.create(req.body);
-    res.status(201).json({ message: 'Réservation créée', reservation });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 14: GET - Liste des réservations avec filtres
-app.get('/api/reservations', async (req, res) => {
-  try {
-    const { statut, dateDebut, dateFin, page = 1, limit = 10 } = req.query;
-    const filter = {};
-    
-    if (statut) filter.statut = statut;
-    if (dateDebut || dateFin) {
-      filter.dateArrivee = {};
-      if (dateDebut) filter.dateArrivee.$gte = new Date(dateDebut);
-      if (dateFin) filter.dateArrivee.$lte = new Date(dateFin);
+    // ROUTE 1: POST - Créer un hôtel
+    if (url === '/api/hotels' && method === 'POST') {
+      const data = await parseBody(req);
+      if (!isValidEmail(data.email)) {
+        sendJSON(res, 400, { error: 'Email invalide' });
+        return;
+      }
+      const result = await hotels.insertOne(data);
+      
+      // Manipulation JSON (lecture/écriture)
+      try {
+        const jsonData = JSON.parse(readFileSync(JSON_FILE, 'utf8') || '[]');
+        jsonData.push({ ...data, _id: result.insertedId.toString() });
+        writeFileSync(JSON_FILE, JSON.stringify(jsonData, null, 2));
+      } catch (err) {
+        // Si le fichier n'existe pas, on le crée
+        writeFileSync(JSON_FILE, JSON.stringify([{ ...data, _id: result.insertedId.toString() }], null, 2));
+      }
+      
+      sendJSON(res, 201, { message: 'Hôtel créé', hotel: { ...data, _id: result.insertedId } });
+      return;
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const reservations = await Reservation.find(filter).populate('hotelId').populate('roomId')
-      .limit(parseInt(limit)).skip(skip);
-    const total = await Reservation.countDocuments(filter);
+    // ROUTE 2: GET - Liste des hôtels avec filtres
+    if (url.startsWith('/api/hotels') && method === 'GET' && !url.includes('/recherche') && !url.includes('/top')) {
+      const query = parseQuery(url);
+      const { ville, etoiles, page = 1, limit = 10 } = query;
+      const filter = { actif: true };
+      
+      if (ville) filter['adresse.ville'] = new RegExp(ville, 'i');
+      if (etoiles) filter.etoiles = parseInt(etoiles);
 
-    res.json({ reservations, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const hotelsList = await hotels.find(filter).limit(parseInt(limit)).skip(skip).toArray();
+      const total = await hotels.countDocuments(filter);
+
+      sendJSON(res, 200, { hotels: hotelsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
+      return;
+    }
+
+    // ROUTE 3: GET - Recherche avancée d'hôtels
+    if (url.startsWith('/api/hotels/recherche/avancee') && method === 'GET') {
+      const query = parseQuery(url);
+      const { ville, etoilesMin, etoilesMax, actif } = query;
+      const filter = {};
+      
+      if (actif === undefined || actif === 'true') {
+        filter.actif = true;
+      } else if (actif === 'false') {
+        filter.actif = false;
+      }
+      
+      if (ville) filter['adresse.ville'] = new RegExp(ville, 'i');
+      if (etoilesMin || etoilesMax) {
+        filter.etoiles = {};
+        if (etoilesMin) filter.etoiles.$gte = parseInt(etoilesMin);
+        if (etoilesMax) filter.etoiles.$lte = parseInt(etoilesMax);
+      }
+      
+      const hotelsList = await hotels.find(filter).toArray();
+      sendJSON(res, 200, { count: hotelsList.length, hotels: hotelsList });
+      return;
+    }
+
+    // ROUTE 4: PUT - Modifier un hôtel
+    if (url.startsWith('/api/hotels/') && method === 'PUT') {
+      const id = extractId(url);
+      const data = await parseBody(req);
+      const result = await hotels.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: data }
+      );
+      if (result.matchedCount === 0) {
+        sendJSON(res, 404, { error: 'Hôtel non trouvé' });
+        return;
+      }
+      const hotel = await hotels.findOne({ _id: new ObjectId(id) });
+      sendJSON(res, 200, { message: 'Hôtel modifié', hotel });
+      return;
+    }
+
+    // ROUTE 5: DELETE - Supprimer un hôtel
+    if (url.startsWith('/api/hotels/') && method === 'DELETE') {
+      const id = extractId(url);
+      const result = await hotels.deleteOne({ _id: new ObjectId(id) });
+      if (result.deletedCount === 0) {
+        sendJSON(res, 404, { error: 'Hôtel non trouvé' });
+        return;
+      }
+      sendJSON(res, 200, { message: 'Hôtel supprimé' });
+      return;
+    }
+
+    // ROUTE 6: GET - Agrégation Top 5 hôtels par étoiles
+    if (url === '/api/hotels/top/etoiles' && method === 'GET') {
+      const pipeline = [
+        { $group: { _id: '$etoiles', nombre: { $sum: 1 }, hotels: { $push: '$nom' } } },
+        { $sort: { _id: -1 } },
+        { $limit: 5 },
+        { $project: { etoiles: '$_id', nombre: 1, hotels: 1, _id: 0 } }
+      ];
+      const result = await hotels.aggregate(pipeline).toArray();
+      sendJSON(res, 200, { topHotels: result });
+      return;
+    }
+
+    // ROUTE 7: POST - Créer une chambre
+    if (url === '/api/rooms' && method === 'POST') {
+      const data = await parseBody(req);
+      const { hotelId, numero, type, prixNuit, capacite } = data;
+      if (!hotelId || !numero || !type || !prixNuit || !capacite) {
+        sendJSON(res, 400, { error: 'Champs manquants' });
+        return;
+      }
+      const result = await rooms.insertOne(data);
+      sendJSON(res, 201, { message: 'Chambre créée', room: { ...data, _id: result.insertedId } });
+      return;
+    }
+
+    // ROUTE 8: GET - Liste des chambres avec filtres
+    if (url.startsWith('/api/rooms') && method === 'GET' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
+      const query = parseQuery(url);
+      const { hotelId, type, prixMin, prixMax, disponible, page = 1, limit = 10 } = query;
+      const filter = {};
+      
+      if (hotelId) filter.hotelId = hotelId;
+      if (type) filter.type = type;
+      if (disponible !== undefined) filter.disponible = disponible === 'true';
+      if (prixMin || prixMax) {
+        filter.prixNuit = {};
+        if (prixMin) filter.prixNuit.$gte = parseInt(prixMin);
+        if (prixMax) filter.prixNuit.$lte = parseInt(prixMax);
+      }
+
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const roomsList = await rooms.find(filter).limit(parseInt(limit)).skip(skip).toArray();
+      const total = await rooms.countDocuments(filter);
+      
+      sendJSON(res, 200, { rooms: roomsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
+      return;
+    }
+
+    // ROUTE 9: PUT - Modifier une chambre
+    if (url.startsWith('/api/rooms/') && method === 'PUT' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
+      const id = extractId(url);
+      const data = await parseBody(req);
+      const result = await rooms.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: data }
+      );
+      if (result.matchedCount === 0) {
+        sendJSON(res, 404, { error: 'Chambre non trouvée' });
+        return;
+      }
+      const room = await rooms.findOne({ _id: new ObjectId(id) });
+      sendJSON(res, 200, { message: 'Chambre modifiée', room });
+      return;
+    }
+
+    // ROUTE 10: DELETE - Supprimer une chambre
+    if (url.startsWith('/api/rooms/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
+      const id = extractId(url);
+      const result = await rooms.deleteOne({ _id: new ObjectId(id) });
+      if (result.deletedCount === 0) {
+        sendJSON(res, 404, { error: 'Chambre non trouvée' });
+        return;
+      }
+      sendJSON(res, 200, { message: 'Chambre supprimée' });
+      return;
+    }
+
+    // ROUTE 11: GET - Agrégation Statistiques des chambres par type
+    if (url === '/api/rooms/stats/par-type' && method === 'GET') {
+      const pipeline = [
+        { $group: { _id: '$type', nombre: { $sum: 1 }, prixMoyen: { $avg: '$prixNuit' } } },
+        { $sort: { nombre: -1 } },
+        { $project: { type: '$_id', nombre: 1, prixMoyen: { $round: ['$prixMoyen', 2] }, _id: 0 } }
+      ];
+      const result = await rooms.aggregate(pipeline).toArray();
+      sendJSON(res, 200, { statistiques: result });
+      return;
+    }
+
+    // ROUTE 12: GET - Chambres les plus réservées (Lookup)
+    if (url === '/api/rooms/plus-reservees' && method === 'GET') {
+      const pipeline = [
+        {
+          $lookup: {
+            from: 'reservations',
+            localField: '_id',
+            foreignField: 'roomId',
+            as: 'reservations'
+          }
+        },
+        { $project: { numero: 1, type: 1, prixNuit: 1, nombreReservations: { $size: '$reservations' } } },
+        { $sort: { nombreReservations: -1 } },
+        { $limit: 10 }
+      ];
+      const result = await rooms.aggregate(pipeline).toArray();
+      sendJSON(res, 200, { topChambres: result });
+      return;
+    }
+
+    // ROUTE 13: POST - Créer une réservation
+    if (url === '/api/reservations' && method === 'POST') {
+      const data = await parseBody(req);
+      const { hotelId, roomId, client, dateArrivee, dateDepart, prixTotal } = data;
+      if (!hotelId || !roomId || !client || !dateArrivee || !dateDepart || !prixTotal) {
+        sendJSON(res, 400, { error: 'Champs manquants' });
+        return;
+      }
+      if (!isValidEmail(client.email)) {
+        sendJSON(res, 400, { error: 'Email invalide' });
+        return;
+      }
+      const result = await reservations.insertOne(data);
+      sendJSON(res, 201, { message: 'Réservation créée', reservation: { ...data, _id: result.insertedId } });
+      return;
+    }
+
+    // ROUTE 14: GET - Liste des réservations avec filtres
+    if (url.startsWith('/api/reservations') && method === 'GET' && !url.includes('/stats') && !url.includes('/completes')) {
+      const query = parseQuery(url);
+      const { statut, dateDebut, dateFin, page = 1, limit = 10 } = query;
+      const filter = {};
+      
+      if (statut) filter.statut = statut;
+      if (dateDebut || dateFin) {
+        filter.dateArrivee = {};
+        if (dateDebut) filter.dateArrivee.$gte = new Date(dateDebut);
+        if (dateFin) filter.dateArrivee.$lte = new Date(dateFin);
+      }
+
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const reservationsList = await reservations.find(filter).limit(parseInt(limit)).skip(skip).toArray();
+      const total = await reservations.countDocuments(filter);
+
+      sendJSON(res, 200, { reservations: reservationsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
+      return;
+    }
+
+    // ROUTE 15: PUT - Modifier une réservation
+    if (url.startsWith('/api/reservations/') && method === 'PUT' && !url.includes('/stats') && !url.includes('/completes')) {
+      const id = extractId(url);
+      const data = await parseBody(req);
+      const result = await reservations.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: data }
+      );
+      if (result.matchedCount === 0) {
+        sendJSON(res, 404, { error: 'Réservation non trouvée' });
+        return;
+      }
+      const reservation = await reservations.findOne({ _id: new ObjectId(id) });
+      sendJSON(res, 200, { message: 'Réservation modifiée', reservation });
+      return;
+    }
+
+    // ROUTE 16: DELETE - Supprimer une réservation
+    if (url.startsWith('/api/reservations/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/completes')) {
+      const id = extractId(url);
+      const result = await reservations.deleteOne({ _id: new ObjectId(id) });
+      if (result.deletedCount === 0) {
+        sendJSON(res, 404, { error: 'Réservation non trouvée' });
+        return;
+      }
+      sendJSON(res, 200, { message: 'Réservation supprimée' });
+      return;
+    }
+
+    // ROUTE 17: GET - Agrégation Statistiques des réservations
+    if (url === '/api/reservations/stats' && method === 'GET') {
+      const pipeline = [
+        { $group: { _id: '$statut', nombre: { $sum: 1 }, revenu: { $sum: '$prixTotal' } } },
+        { $sort: { nombre: -1 } },
+        { $project: { statut: '$_id', nombre: 1, revenu: { $round: ['$revenu', 2] }, _id: 0 } }
+      ];
+      const stats = await reservations.aggregate(pipeline).toArray();
+      const total = await reservations.countDocuments();
+      sendJSON(res, 200, { stats, total });
+      return;
+    }
+
+    // ROUTE 18: GET - Réservations avec détails complets (Lookup multiple)
+    if (url === '/api/reservations/completes' && method === 'GET') {
+      const pipeline = [
+        {
+          $lookup: {
+            from: 'hotels',
+            localField: 'hotelId',
+            foreignField: '_id',
+            as: 'hotel'
+          }
+        },
+        {
+          $lookup: {
+            from: 'rooms',
+            localField: 'roomId',
+            foreignField: '_id',
+            as: 'room'
+          }
+        },
+        { $unwind: '$hotel' },
+        { $unwind: '$room' },
+        {
+          $project: {
+            'hotel.nom': 1,
+            'hotel.etoiles': 1,
+            'room.numero': 1,
+            'room.type': 1,
+            'client.nom': 1,
+            'client.email': 1,
+            dateArrivee: 1,
+            dateDepart: 1,
+            prixTotal: 1,
+            statut: 1
+          }
+        },
+        { $sort: { dateArrivee: -1 } }
+      ];
+      
+      const reservationsList = await reservations.aggregate(pipeline).toArray();
+      sendJSON(res, 200, { reservations: reservationsList, nombre: reservationsList.length });
+      return;
+    }
+
+    // Route non trouvée
+    sendJSON(res, 404, { error: 'Route non trouvée' });
+
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 15: PUT - Modifier une réservation
-app.put('/api/reservations/:id', async (req, res) => {
-  try {
-    const reservation = await Reservation.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!reservation) return res.status(404).json({ error: 'Réservation non trouvée' });
-    res.json({ message: 'Réservation modifiée', reservation });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-//personne 6
-
-// ROUTE 16: DELETE - Supprimer une réservation
-app.delete('/api/reservations/:id', async (req, res) => {
-  try {
-    const reservation = await Reservation.findByIdAndDelete(req.params.id);
-    if (!reservation) return res.status(404).json({ error: 'Réservation non trouvée' });
-    res.json({ message: 'Réservation supprimée' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 17: GET - Agrégation Statistiques des réservations
-
-app.get('/api/reservations/stats', async (req, res) => {
-  try {
-    const pipeline = [
-      { $group: { _id: '$statut', nombre: { $sum: 1 }, revenu: { $sum: '$prixTotal' } } },
-      { $sort: { nombre: -1 } },
-      { $project: { statut: '$_id', nombre: 1, revenu: { $round: ['$revenu', 2] }, _id: 0 } }
-    ];
-    const stats = await Reservation.aggregate(pipeline);
-    const total = await Reservation.countDocuments();
-    res.json({ stats, total });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ROUTE 18: GET - Réservations avec détails complets (Lookup multiple)
-app.get('/api/reservations/completes', async (req, res) => {
-  try {
-    const pipeline = [
-      {
-        $lookup: {
-          from: 'hotels',
-          localField: 'hotelId',
-          foreignField: '_id',
-          as: 'hotel'
-        }
-      },
-      {
-        $lookup: {
-          from: 'rooms',
-          localField: 'roomId',
-          foreignField: '_id',
-          as: 'room'
-        }
-      },
-      { $unwind: '$hotel' },
-      { $unwind: '$room' },
-      {
-        $project: {
-          'hotel.nom': 1,
-          'hotel.etoiles': 1,
-          'room.numero': 1,
-          'room.type': 1,
-          'client.nom': 1,
-          'client.email': 1,
-          dateArrivee: 1,
-          dateDepart: 1,
-          prixTotal: 1,
-          statut: 1
-        }
-      },
-      { $sort: { dateArrivee: -1 } }
-    ];
-    
-    const reservations = await Reservation.aggregate(pipeline);
-    res.json({ reservations, nombre: reservations.length });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Erreur:', error);
+    sendJSON(res, 500, { error: error.message });
   }
 });
 
 // DÉMARRAGE
-
-app.listen(PORT, () => console.log(`🚀 Serveur sur http://localhost:${PORT}`));
+server.listen(PORT, () => {
+  console.log(`🚀 Serveur sur http://localhost:${PORT}`);
+});
