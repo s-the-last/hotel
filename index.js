@@ -103,7 +103,7 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
-
+//persone1
     // ROUTE 1: POST - Créer un hôtel
     if (url === '/api/hotels' && method === 'POST') {
       const data = await parseBody(req);
@@ -167,7 +167,7 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { count: hotelsList.length, hotels: hotelsList });
       return;
     }
-
+//persone2
     // ROUTE 4: PUT - Modifier un hôtel
     if (url.startsWith('/api/hotels/') && method === 'PUT') {
       const id = extractId(url);
@@ -209,7 +209,7 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { topHotels: result });
       return;
     }
-
+//persone3
     // ROUTE 7: POST - Créer une chambre
     if (url === '/api/rooms' && method === 'POST') {
       const data = await parseBody(req);
@@ -262,7 +262,7 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { message: 'Chambre modifiée', room });
       return;
     }
-
+//persone4
     // ROUTE 10: DELETE - Supprimer une chambre
     if (url.startsWith('/api/rooms/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
       const id = extractId(url);
@@ -306,7 +306,7 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { topChambres: result });
       return;
     }
-
+//persone5
     // ROUTE 13: POST - Créer une réservation
     if (url === '/api/reservations' && method === 'POST') {
       const data = await parseBody(req);
@@ -344,7 +344,7 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { reservations: reservationsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
       return;
     }
-
+//persone6
     // ROUTE 15: PUT - Modifier une réservation
     if (url.startsWith('/api/reservations/') && method === 'PUT' && !url.includes('/stats') && !url.includes('/completes')) {
       const id = extractId(url);
