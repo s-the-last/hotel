@@ -252,11 +252,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 //persone4
-    // ROUTE 10: DELETE - Supprimer une chambre
-    if (url.startsWith('/api/rooms/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
-      await deleteById(rooms, extractId(url), res, 'Chambre');
-      return;
-    }
+
+// ROUTE 10 : POST - Créer un nouveau type de chambre
+if (url === '/api/rooms/types' && method === 'POST') {
+  const data = await parseBody(req);
+  
+  if (!data.type || !data.description) {
+    sendJSON(res, 400, { error: 'Type et description requis' });
+    return;
+  }
+  sendJSON(res, 201, { 
+    message: 'Nouveau type ajouté au catalogue',
+    type: data.type,
+    description: data.description,
+    prixEstime: data.prixRecommande || 350,  // 350€ par défaut
+    statut: 'en_etude',
+    dateCreation: new Date().toISOString()
+    });
+    return;
+   }
 
     // ROUTE 11: GET - Agrégation Statistiques des chambres par type
     if (url === '/api/rooms/stats/par-type' && method === 'GET') {
@@ -289,6 +303,13 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { topChambres: result });
       return;
     }
+
+    // ROUTE bonus: DELETE - Supprimer une chambre
+    if (url.startsWith('/api/rooms/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/plus-reservees')) {
+      await deleteById(rooms, extractId(url), res, 'Chambre');
+      return;
+    }
+
 //persone5
     // ROUTE 13: POST - Créer une réservation
     if (url === '/api/reservations' && method === 'POST') {
