@@ -133,7 +133,8 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
-//persone1
+
+  //franck
     // ROUTE 1: POST - Créer un hôtel
     if (url === '/api/hotels' && method === 'POST') {
       const data = await parseBody(req);
@@ -185,7 +186,7 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { count: hotelsList.length, hotels: hotelsList });
       return;
     }
-//persone2
+//Ulrich
     // ROUTE 4: PUT - Modifier un hôtel
     if (url.startsWith('/api/hotels/') && method === 'PUT' && !url.includes('/top') && !url.includes('/recherche')) {
       const data = await parseBody(req);
@@ -211,7 +212,7 @@ const server = http.createServer(async (req, res) => {
       sendJSON(res, 200, { topHotels: result });
       return;
     }
-//persone3
+//sara
     // ROUTE 7: POST - Créer une chambre
     if (url === '/api/rooms' && method === 'POST') {
       const data = await parseBody(req);
@@ -251,8 +252,8 @@ const server = http.createServer(async (req, res) => {
       await updateById(rooms, extractId(url), data, res, 'Chambre');
       return;
     }
-//persone4
-
+    
+//beni
 // ROUTE 10 : POST - Créer un nouveau type de chambre
 if (url === '/api/rooms/types' && method === 'POST') {
   const data = await parseBody(req);
@@ -310,7 +311,7 @@ if (url === '/api/rooms/types' && method === 'POST') {
       return;
     }
 
-//persone5
+//junior
     // ROUTE 13: POST - Créer une réservation
     if (url === '/api/reservations' && method === 'POST') {
       const data = await parseBody(req);
@@ -345,7 +346,7 @@ if (url === '/api/rooms/types' && method === 'POST') {
       sendJSON(res, 200, { reservations: reservationsList, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
       return;
     }
-//persone6
+
     // ROUTE 15: PUT - Modifier une réservation
     if (url.startsWith('/api/reservations/') && method === 'PUT' && !url.includes('/stats') && !url.includes('/completes')) {
       const data = await parseBody(req);
@@ -353,6 +354,7 @@ if (url === '/api/rooms/types' && method === 'POST') {
       return;
     }
 
+ //Aymelyne
     // ROUTE 16: DELETE - Supprimer une réservation
     if (url.startsWith('/api/reservations/') && method === 'DELETE' && !url.includes('/stats') && !url.includes('/completes')) {
       await deleteById(reservations, extractId(url), res, 'Réservation');
