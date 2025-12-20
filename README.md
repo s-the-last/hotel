@@ -20,7 +20,7 @@ npm install
 
 Créer `.env` :
 ```env
-MONGODB_URI=mongodb+srv://sarahadjar01_db_user:admin123@nosql.1c73sso.mongodb.net/hotel
+MONGODB_URI=mongodb+srv://sarahadjar01_db_user:(password)@nosql.1c73sso.mongodb.net/hotel
 PORT=3000
 ```
 
